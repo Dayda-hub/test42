@@ -1,0 +1,128 @@
+# Количество реплик (подов) вашего приложения.
+replicaCount: 1
+
+# Настройки Docker-образа
+image:
+  repository: operations42/zouzoublique-api
+  pullPolicy: IfNotPresent
+  # Тег образа. Рекомендуется использовать конкретную версию, а не "latest".
+  tag: "v1"
+
+# Секреты для доступа к приватным Docker-репозиториям.
+imagePullSecrets: []
+
+# Настройки Service Account для подов.
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Дополнительные аннотации для подов.
+podAnnotations: {}
+# Дополнительные лейблы для подов.
+podLabels: {}
+
+# Контекст безопасности на уровне пода.
+podSecurityContext: {}
+
+# Контекст безопасности на уровне контейнера.
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Настройки Service для вашего приложения.
+service:
+  type: ClusterIP
+  # Порт, на котором сервис будет принимать трафик.
+  port: 3000
+
+# Настройки Ingress для доступа к приложению извне кластера.
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: api.zouzoublique.site.ru
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: zouzoublique-api-tls
+      hosts:
+        - api.zouzoublique.site.ru
+
+# Запросы и лимиты по ресурсам (CPU, память).
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Настройки автомасштабирования (Horizontal Pod Autoscaler).
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Проверка жизнеспособности (liveness probe). 
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+# Проверка готовности (readiness probe).
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+
+# Определения дополнительных томов (volumes), которые будут примонтированы к поду.
+volumes:
+- name: config-mount
+  configMap:
+    name: '{{ include "zouzoublique-api.fullname" .}}'
+
+# Определения точек монтирования (volume mounts) для контейнера.
+volumeMounts:
+- name: config-mount
+  mountPath: "/etc/zouzoublique-api/config.ini"
+  subPath: config
+
+# Секция для создания ConfigMap с конфигурацией вашего приложения.
+configMap:
+  enabled: true
+  data:
+    config: |-
+      [main]
+      database_url = postgres://{{ .Values.postgresql.auth.username }}:{{ .Values.postgresql.auth.password }}@{{ include "zouzoublique-api.fullname" . }}-postgres:{{ .Values.postgresql.service.port }}/{{ .Values.postgresql.auth.database }}?sslmode=disable
+      port = {{ .Values.service.port }}
+
+# --- Настройки для встроенной базы данных PostgreSQL ---
+postgresql:
+  # Включить/выключить развертывание PostgreSQL вместе с вашим приложением.
+  enabled: true
+  image:
+    repository: postgres
+    pullPolicy: IfNotPresent
+    tag: "15.3-alpine"
+  auth:
+    username: "zouzoublique"
+    password: "zouzoublique_password"
+    database: "zouzoublique_db"
+  service:
+    type: ClusterIP
+    port: 5432
+  persistence:
+    enabled: true
+    size: 8Gi
+    # storageClassName: ""
